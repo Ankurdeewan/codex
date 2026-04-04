@@ -1,12 +1,12 @@
 mod custom_ca;
 mod default_client;
 mod error;
+pub mod ipv4;
 mod request;
 mod retry;
 mod sse;
 mod telemetry;
 mod transport;
-pub mod ipv4;
 
 pub use crate::custom_ca::BuildCustomCaTransportError;
 /// Test-only subprocess hook for custom CA coverage.
@@ -22,6 +22,9 @@ pub use crate::default_client::CodexHttpClient;
 pub use crate::default_client::CodexRequestBuilder;
 pub use crate::error::StreamError;
 pub use crate::error::TransportError;
+pub use crate::ipv4::apply_ipv4_if_forced;
+pub use crate::ipv4::resolve_ipv4;
+pub use crate::ipv4::should_force_ipv4;
 pub use crate::request::Request;
 pub use crate::request::RequestCompression;
 pub use crate::request::Response;
@@ -35,6 +38,3 @@ pub use crate::transport::ByteStream;
 pub use crate::transport::HttpTransport;
 pub use crate::transport::ReqwestTransport;
 pub use crate::transport::StreamResponse;
-pub use crate::ipv4::apply_ipv4_if_forced;
-pub use crate::ipv4::should_force_ipv4;
-pub use crate::ipv4::resolve_ipv4;

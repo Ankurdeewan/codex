@@ -10,9 +10,9 @@ use crate::sse::responses::ResponsesStreamEvent;
 use crate::sse::responses::process_responses_event;
 use crate::telemetry::WebsocketTelemetry;
 use codex_client::TransportError;
-use codex_client::should_force_ipv4;
-use codex_client::resolve_ipv4;
 use codex_client::maybe_build_rustls_client_config_with_custom_ca;
+use codex_client::resolve_ipv4;
+use codex_client::should_force_ipv4;
 use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -366,9 +366,9 @@ async fn connect_websocket(
     let (stream, response) = if should_force_ipv4() {
         let host = url.host_str().unwrap_or("localhost");
         let port = url.port_or_known_default().unwrap_or(443);
-        let addr = resolve_ipv4(host, port)
-            .await
-            .map_err(|err| ApiError::Stream(format!("IPv4 resolution failed for {host}:{port}: {err}")))?;
+        let addr = resolve_ipv4(host, port).await.map_err(|err| {
+            ApiError::Stream(format!("IPv4 resolution failed for {host}:{port}: {err}"))
+        })?;
         info!("CODEX_FORCE_IPV4: resolved {host}:{port} to {addr}");
         let tcp = TcpStream::connect(addr)
             .await
@@ -390,13 +390,9 @@ async fn connect_websocket(
         );
         (stream, response)
     } else {
-        let response = connect_async_tls_with_config(
-            request,
-            Some(websocket_config()),
-            false,
-            connector,
-        )
-        .await;
+        let response =
+            connect_async_tls_with_config(request, Some(websocket_config()), false, connector)
+                .await;
         match response {
             Ok((stream, response)) => {
                 info!(
