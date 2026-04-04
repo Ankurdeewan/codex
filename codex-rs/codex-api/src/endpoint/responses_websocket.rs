@@ -11,6 +11,8 @@ use crate::sse::responses::process_responses_event;
 use crate::telemetry::WebsocketTelemetry;
 use codex_client::TransportError;
 use codex_client::maybe_build_rustls_client_config_with_custom_ca;
+use codex_client::resolve_ipv4;
+use codex_client::should_force_ipv4;
 use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -361,25 +363,48 @@ async fn connect_websocket(
         .map_err(|err| ApiError::Stream(format!("failed to configure websocket TLS: {err}")))?
         .map(tokio_tungstenite::Connector::Rustls);
 
-    let response = connect_async_tls_with_config(
-        request,
-        Some(websocket_config()),
-        false, // `false` means "do not disable Nagle", which is tungstenite's recommended default.
-        connector,
-    )
-    .await;
-
-    let (stream, response) = match response {
-        Ok((stream, response)) => {
-            info!(
-                "successfully connected to websocket: {url}, headers: {:?}",
-                response.headers()
-            );
-            (stream, response)
-        }
-        Err(err) => {
-            error!("failed to connect to websocket: {err}, url: {url}");
-            return Err(map_ws_error(err, &url));
+    let (stream, response) = if should_force_ipv4() {
+        let host = url.host_str().unwrap_or("localhost");
+        let port = url.port_or_known_default().unwrap_or(443);
+        let addr = resolve_ipv4(host, port).await.map_err(|err| {
+            ApiError::Stream(format!("IPv4 resolution failed for {host}:{port}: {err}"))
+        })?;
+        info!("CODEX_FORCE_IPV4: resolved {host}:{port} to {addr}");
+        let tcp = TcpStream::connect(addr)
+            .await
+            .map_err(|err| ApiError::Stream(format!("IPv4 TCP connect to {addr} failed: {err}")))?;
+        let (stream, response) = tokio_tungstenite::client_async_tls_with_config(
+            request,
+            tcp,
+            Some(websocket_config()),
+            connector,
+        )
+        .await
+        .map_err(|err| {
+            error!("failed to connect to websocket (IPv4): {err}, url: {url}");
+            map_ws_error(err, &url)
+        })?;
+        info!(
+            "successfully connected to websocket (IPv4): {url}, headers: {:?}",
+            response.headers()
+        );
+        (stream, response)
+    } else {
+        let response =
+            connect_async_tls_with_config(request, Some(websocket_config()), false, connector)
+                .await;
+        match response {
+            Ok((stream, response)) => {
+                info!(
+                    "successfully connected to websocket: {url}, headers: {:?}",
+                    response.headers()
+                );
+                (stream, response)
+            }
+            Err(err) => {
+                error!("failed to connect to websocket: {err}, url: {url}");
+                return Err(map_ws_error(err, &url));
+            }
         }
     };
 

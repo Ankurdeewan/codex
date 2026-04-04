@@ -1,6 +1,7 @@
 mod custom_ca;
 mod default_client;
 mod error;
+pub mod ipv4;
 mod request;
 mod retry;
 mod sse;
@@ -21,6 +22,9 @@ pub use crate::default_client::CodexHttpClient;
 pub use crate::default_client::CodexRequestBuilder;
 pub use crate::error::StreamError;
 pub use crate::error::TransportError;
+pub use crate::ipv4::apply_ipv4_if_forced;
+pub use crate::ipv4::resolve_ipv4;
+pub use crate::ipv4::should_force_ipv4;
 pub use crate::request::Request;
 pub use crate::request::RequestCompression;
 pub use crate::request::Response;
