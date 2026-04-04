@@ -7,6 +7,7 @@
 use codex_client::BuildCustomCaTransportError;
 use codex_client::CodexHttpClient;
 pub use codex_client::CodexRequestBuilder;
+use codex_client::apply_ipv4_if_forced;
 use codex_client::build_reqwest_client_with_custom_ca;
 use codex_terminal_detection::user_agent;
 use reqwest::header::HeaderMap;
@@ -219,6 +220,8 @@ pub fn try_build_reqwest_client() -> Result<reqwest::Client, BuildCustomCaTransp
     if is_sandboxed() {
         builder = builder.no_proxy();
     }
+
+    builder = apply_ipv4_if_forced(builder);
 
     build_reqwest_client_with_custom_ca(builder)
 }

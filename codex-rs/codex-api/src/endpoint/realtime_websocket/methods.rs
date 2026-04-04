@@ -15,6 +15,8 @@ use crate::endpoint::realtime_websocket::protocol::parse_realtime_event;
 use crate::error::ApiError;
 use crate::provider::Provider;
 use codex_client::maybe_build_rustls_client_config_with_custom_ca;
+use codex_client::should_force_ipv4;
+use codex_client::resolve_ipv4;
 use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
 use futures::SinkExt;
 use futures::StreamExt;
@@ -481,14 +483,34 @@ impl RealtimeWebsocketClient {
         let connector = maybe_build_rustls_client_config_with_custom_ca()
             .map_err(|err| ApiError::Stream(format!("failed to configure websocket TLS: {err}")))?
             .map(tokio_tungstenite::Connector::Rustls);
-        let (stream, response) = tokio_tungstenite::connect_async_tls_with_config(
-            request,
-            Some(websocket_config()),
-            false,
-            connector,
-        )
-        .await
-        .map_err(|err| ApiError::Stream(format!("failed to connect realtime websocket: {err}")))?;
+        let (stream, response) = if should_force_ipv4() {
+            let host = ws_url.host_str().unwrap_or("localhost");
+            let port = ws_url.port_or_known_default().unwrap_or(443);
+            let addr = resolve_ipv4(host, port)
+                .await
+                .map_err(|err| ApiError::Stream(format!("IPv4 resolution failed for {host}:{port}: {err}")))?;
+            info!("CODEX_FORCE_IPV4: resolved {host}:{port} to {addr}");
+            let tcp = TcpStream::connect(addr)
+                .await
+                .map_err(|err| ApiError::Stream(format!("IPv4 TCP connect to {addr} failed: {err}")))?;
+            tokio_tungstenite::client_async_tls_with_config(
+                request,
+                tcp,
+                Some(websocket_config()),
+                connector,
+            )
+            .await
+            .map_err(|err| ApiError::Stream(format!("failed to connect realtime websocket: {err}")))?
+        } else {
+            tokio_tungstenite::connect_async_tls_with_config(
+                request,
+                Some(websocket_config()),
+                false,
+                connector,
+            )
+            .await
+            .map_err(|err| ApiError::Stream(format!("failed to connect realtime websocket: {err}")))?
+        };
         info!(
             ws_url = %ws_url,
             status = %response.status(),
